@@ -2,12 +2,12 @@ import * as AWS  from 'aws-sdk'
 const s3 = new AWS.S3({
   signatureVersion: 'v4'
 });
-const bucketName = process.env.TODOS_BUCKET
+const bucketName = process.env.LISTS_BUCKET
 
-export function getSignedUrl(id: string): string {
+export function getSignedUrl(itemId: string): string {
   return s3.getSignedUrl('putObject', {
     Bucket: bucketName,
-    Key: id,
+    Key: itemId,
     Expires: 300
   })
 }

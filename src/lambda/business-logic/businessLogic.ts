@@ -104,3 +104,9 @@ export async function updateTodo(event: APIGatewayProxyEvent) {
   return fullTodoItem;
 } 
 
+export async function updateItemAttachment(event: APIGatewayProxyEvent) {
+  const itemId = event.pathParameters.itemId
+  const listId = event.pathParameters.listId
+  return await listAccess.updateItemAttachment(itemId, listId );
+} 
+

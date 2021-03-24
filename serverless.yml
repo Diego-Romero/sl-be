@@ -207,6 +207,19 @@ functions:
             description: update todo
             requestModels:
               "application/json": UpdateTodoRequest
+  UpdateListItemAttachment:
+    handler: src/lambda/http/updateListItemAttachment.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_ITEM_TABLE}
+    events:
+      - http:
+          method: patch
+          path: list/{listId}/item/{itemId}/attachment
+          cors: true
+          authorizer: Auth
 
   DeleteTodo:
     handler: src/lambda/http/deleteTodo.handler
@@ -253,6 +266,24 @@ functions:
           method: post
           path: todos/{todoId}/attachment
           cors: true
+  GenerateItemImageUploadUrl:
+    handler: src/lambda/http/generateItemImageUploadUrl.handler
+    iamRoleStatementsName: ${self:service.name}-generate-upload-url-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_ITEM_TABLE}
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+          - s3:GetObject
+        Resource: arn:aws:s3:::${self:provider.environment.LISTS_BUCKET}/*
+    events:
+      - http:
+          method: post
+          path: list/{itemId}/attachment
+          cors: true
 
 resources:
   Resources:
@@ -276,7 +307,7 @@ resources:
         ValidateRequestBody: true
         ValidateRequestParameters: false
 
-    TodosBucket:
+    ListItemBucket:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ${self:provider.environment.LISTS_BUCKET}
@@ -306,7 +337,7 @@ resources:
               Principal: "*"
               Action: "s3:GetObject"
               Resource: "arn:aws:s3:::${self:provider.environment.LISTS_BUCKET}/*"
-        Bucket: !Ref TodosBucket
+        Bucket: !Ref ListItemBucket
 
     ListsTable:
       Type: AWS::DynamoDB::Table

@@ -10,35 +10,60 @@ export class ListAccess {
     private readonly listsTable = process.env.LISTS_TABLE,
     private readonly listItemsTable = process.env.LISTS_ITEM_TABLE,
     private readonly listsTableIndex = process.env.LISTS_TABLE_INDEX,
-    private readonly listItemsTableIndex = process.env.LISTS_ITEM_TABLE_INDEX
-    ) {}
-    
-    async createList(item: List): Promise<List> {
-      logger.info("creating list", { key: item });
-      await this.docClient
+    private readonly listItemsTableIndex = process.env.LISTS_ITEM_TABLE_INDEX,
+    private readonly bucket = process.env.LISTS_BUCKET
+  ) {}
+
+  async createList(item: List): Promise<List> {
+    logger.info("creating list", { key: item });
+    await this.docClient
       .put({
         TableName: this.listsTable,
         Item: item,
       })
       .promise();
-      return item;
-    }
+    return item;
+  }
 
-    async deleteItem(itemId: string, listId: string) {
-      logger.info("deleting list item ", itemId);
-      await this.docClient
-        .delete({
-          TableName: this.listItemsTable,
-          Key: {
-            itemId,
-            listId
-          },
-        })
-        .promise();
+  async deleteItem(itemId: string, listId: string) {
+    logger.info("deleting list item ", itemId);
+    await this.docClient
+      .delete({
+        TableName: this.listItemsTable,
+        Key: {
+          itemId,
+          listId,
+        },
+      })
+      .promise();
 
-      logger.info("successfully deleted list item");
-    }
-    
+    logger.info("successfully deleted list item");
+  }
+
+  async updateItemAttachment(itemId: string, listId: string) {
+    logger.info("updating todo", { key: itemId });
+    const attachmentUrl = `https://${this.bucket}.s3.amazonaws.com/${itemId}`;
+    const result = await this.docClient
+      .update({
+        TableName: this.listItemsTable,
+        Key: {
+          itemId,
+          listId,
+        },
+        ExpressionAttributeNames: {
+          "#attachment": "attachment",
+        },
+        ExpressionAttributeValues: {
+          ":attachment": attachmentUrl,
+        },
+        UpdateExpression: "SET #attachment = :attachment",
+        ReturnValues: "ALL_NEW",
+      })
+      .promise();
+    logger.info("updated successfully");
+    return result.Attributes as ListItem;
+  }
+
   async createListItem(listItem: ListItem): Promise<ListItem> {
     logger.info("creating list item", { key: listItem });
     await this.docClient
