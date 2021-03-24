@@ -1,0 +1,389 @@
+service:
+  name: udacity-lists
+
+plugins:
+  - serverless-webpack
+  - serverless-iam-roles-per-function
+  - serverless-dynamodb-local
+  - serverless-reqvalidator-plugin
+  - serverless-aws-documentation
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+
+  tracing:
+    lambda: true
+    apiGateway: true
+
+  environment:
+    LISTS_TABLE: udacity-capstone-project-lists-${self:provider.stage}
+    LISTS_ITEM_TABLE: udacity-capstone-project-list-items-${self:provider.stage}
+    INDEX_NAME: todosUserId
+    LISTS_TABLE_INDEX: listsUserId
+    LISTS_ITEM_TABLE_INDEX: listItemListId
+    LISTS_BUCKET: udacity-capstone-project-lists-app-${self:provider.stage}
+
+custom:
+  serverless-offline:
+    port: 3003
+
+  dynamodb:
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+    stages:
+      - dev
+
+  documentation:
+    api:
+      info:
+        version: v1.0.0
+        title: lists app
+        description: lists app
+    models:
+      - name: CreateListRequest
+        contentType: application/json
+        schema: ${file(validationModels/create-list-request.json)}
+      - name: CreateListItemRequest
+        contentType: application/json
+        schema: ${file(validationModels/create-list-item-request.json)}
+      - name: CreateTodoRequest
+        contentType: application/json
+        schema: ${file(validationModels/create-todo-request.json)}
+      - name: UpdateTodoRequest
+        contentType: application/json
+        schema: ${file(validationModels/update-todo-request.json)}
+
+functions:
+  Auth:
+    handler: src/lambda/auth/auth0Authorizer.handler
+
+  GetLists:
+    handler: src/lambda/http/getLists.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:*:*:table/${self:provider.environment.LISTS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:*:*:table/${self:provider.environment.LISTS_TABLE}/index/${self:provider.environment.LISTS_TABLE_INDEX}
+    events:
+      - http:
+          method: get
+          path: lists
+          cors: true
+          authorizer: Auth
+
+  CreateList:
+    handler: src/lambda/http/createList.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_TABLE}
+    events:
+      - http:
+          method: post
+          path: lists
+          cors: true
+          authorizer: Auth
+          reqValidatorName: RequestBodyValidator
+          request:
+            schema:
+              application/json: ${file(validationModels/create-list-request.json)}
+          documentation:
+            summary: Create a new list
+            description: Create a new list
+            requestModels:
+              "application/json": CreateListRequest
+  GetList:
+    handler: src/lambda/http/getList.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:*:*:table/${self:provider.environment.LISTS_ITEM_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:*:*:table/${self:provider.environment.LISTS_ITEM_TABLE}/index/${self:provider.environment.LISTS_ITEM_TABLE_INDEX}
+    events:
+      - http:
+          method: get
+          path: list/{listId}
+          cors: true
+          authorizer: Auth
+  CreateListItem:
+    handler: src/lambda/http/createListItem.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_ITEM_TABLE}
+    events:
+      - http:
+          method: post
+          path: list/{listId}
+          cors: true
+          authorizer: Auth
+          reqValidatorName: RequestBodyValidator
+          request:
+            schema:
+              application/json: ${file(validationModels/create-list-item-request.json)}
+          documentation:
+            summary: Create a new list item
+            description: Create a new list item
+            requestModels:
+              "application/json": CreateListItemRequest
+
+  GetTodos:
+    handler: src/lambda/http/getTodos.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:*:*:table/${self:provider.environment.LISTS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:*:*:table/${self:provider.environment.LISTS_TABLE}/index/${self:provider.environment.INDEX_NAME}
+    events:
+      - http:
+          method: get
+          path: todos
+          cors: true
+          authorizer: Auth
+
+  # CreateTodo:
+  #   handler: src/lambda/http/createTodo.handler
+  #   iamRoleStatements:
+  #     - Effect: Allow
+  #       Action:
+  #         - dynamodb:PutItem
+  #       Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_TABLE}
+  #   events:
+  #     - http:
+  #         method: post
+  #         path: todos
+  #         authorizer: Auth
+  #         cors: true
+  #         reqValidatorName: RequestBodyValidator
+  #         request:
+  #           schema:
+  #             application/json: ${file(validationModels/create-todo-request.json)}
+  #         documentation:
+  #           summary: Create a new todo
+  #           description: Create a new todo
+  #           requestModels:
+  #             "application/json": CreateTodoRequest
+
+  UpdateTodo:
+    handler: src/lambda/http/updateTodo.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_TABLE}
+    events:
+      - http:
+          method: patch
+          path: todos/{todoId}
+          cors: true
+          authorizer: Auth
+          reqValidatorName: RequestBodyValidator
+          request:
+            schema:
+              application/json: ${file(validationModels/update-todo-request.json)}
+          documentation:
+            summary: update todo
+            description: update todo
+            requestModels:
+              "application/json": UpdateTodoRequest
+
+  DeleteTodo:
+    handler: src/lambda/http/deleteTodo.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:DeleteItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_TABLE}
+    events:
+      - http:
+          method: delete
+          path: todos/{todoId}
+          cors: true
+          authorizer: Auth
+  DeleteListItem:
+    handler: src/lambda/http/deleteListItem.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:DeleteItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_ITEM_TABLE}
+    events:
+      - http:
+          method: delete
+          path: list/{listId}/item/{itemId}
+          cors: true
+          authorizer: Auth
+
+  GenerateUploadUrl:
+    handler: src/lambda/http/generateUploadUrl.handler
+    iamRoleStatementsName: ${self:service.name}-generate-upload-url-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LISTS_TABLE}
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+          - s3:GetObject
+        Resource: arn:aws:s3:::${self:provider.environment.LISTS_BUCKET}/*
+    events:
+      - http:
+          method: post
+          path: todos/{todoId}/attachment
+          cors: true
+
+resources:
+  Resources:
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,OPTIONS,POST,PATCH'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: ApiGatewayRestApi
+
+    RequestBodyValidator:
+      Type: AWS::ApiGateway::RequestValidator
+      Properties:
+        Name: "request-body-validator"
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ValidateRequestBody: true
+        ValidateRequestParameters: false
+
+    TodosBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.LISTS_BUCKET}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - "*"
+              AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+                - HEAD
+              MaxAge: 3000
+
+    BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        PolicyDocument:
+          Id: MyPolicy
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PublicReadForGetBucketObjects
+              Effect: Allow
+              Principal: "*"
+              Action: "s3:GetObject"
+              Resource: "arn:aws:s3:::${self:provider.environment.LISTS_BUCKET}/*"
+        Bucket: !Ref TodosBucket
+
+    ListsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.LISTS_TABLE}
+        AttributeDefinitions:
+          - AttributeName: listId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: listId
+            KeyType: HASH
+          - AttributeName: createdAt
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.LISTS_TABLE_INDEX}
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+    ListItemsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.LISTS_ITEM_TABLE}
+        AttributeDefinitions:
+          - AttributeName: itemId
+            AttributeType: S
+          - AttributeName: listId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: listId
+            KeyType: HASH
+          - AttributeName: itemId
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.LISTS_ITEM_TABLE_INDEX}
+            KeySchema:
+              - AttributeName: listId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    # TodosTable:
+    #   Type: AWS::DynamoDB::Table
+    #   Properties:
+    #     BillingMode: PAY_PER_REQUEST
+    #     TableName: ${self:provider.environment.LISTS_TABLE}
+    #     AttributeDefinitions:
+    #       - AttributeName: todoId
+    #         AttributeType: S
+    #       - AttributeName: userId
+    #         AttributeType: S
+    #       - AttributeName: createdAt
+    #         AttributeType: S
+    #     KeySchema:
+    #       - AttributeName: userId
+    #         KeyType: HASH
+    #       - AttributeName: todoId
+    #         KeyType: RANGE
+    #     GlobalSecondaryIndexes:
+    #       - IndexName: ${self:provider.environment.INDEX_NAME}
+    #         KeySchema:
+    #           - AttributeName: userId
+    #             KeyType: HASH
+    #           - AttributeName: createdAt
+    #             KeyType: RANGE
+    #         Projection:
+    #           ProjectionType: ALL
